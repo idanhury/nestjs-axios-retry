@@ -3,6 +3,9 @@ import axios, { AxiosInstance } from 'axios';
 import Redis from 'ioredis';
 
 export interface AxiosProviderOptions {
+    [key: string]: HostOptions
+}
+interface HostOptions {
     requests: number;
     interval: number; // seconds
     headers: Record<string, any>[];
@@ -14,11 +17,29 @@ export const AxiosProvider: Provider = {
         const instance = axios.create();
 
         instance.interceptors.request.use(async (config) => {
-            await checkRateLimit(options.requests, options.interval, redisClient);
+            const hostname = extractHostname(instance.getUri(config));
+            const lang = hostname.match(/\b(fr|he|en)\b/);
+            const hostOptions: HostOptions = options[hostname];
 
-            if (options.headers.length > 0) {
-                Object.entries(options.headers[0]).forEach(([key, value]) => {
-                    config.headers.set(key, value);
+            if (!hostOptions || hostOptions.headers.length === 0) {
+                return config;
+            }
+
+            // await checkRateLimit(hostOptions.requests, hostOptions.interval, redisClient);
+            const keys = hostOptions.headers.map((header, i) => `${hostname}_dx_${i}`);
+            const response = await checkRateLimit(keys, hostOptions.requests, hostOptions.interval, redisClient);
+            const index = extractAfterDx(response);
+
+            if (hostOptions.headers[index]) {
+                Object.entries(hostOptions.headers[index]).forEach(([key, value]) => {
+
+                    // for dev. testing
+                    // @ts-ignore
+                    if (!value.includes(lang[0])) {
+                        debugger;
+                    }
+
+                    config.headers[key] = value;
                 });
             }
 
@@ -30,68 +51,77 @@ export const AxiosProvider: Provider = {
     inject: ['SHARED_REDIS', 'AXIOS_OPTIONS'],
 };
 
-async function checkRateLimit(requests: number, interval: number, redisClient: Redis): Promise<void> {
+async function checkRateLimit(keys: string[], requests: number, interval: number, redisClient: Redis): Promise<string> {
     return new Promise(async (resolve, reject) => {
-        const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
-        const key = 'rate_limit_timestamps';
-        const multi = redisClient.multi();
-        multi.llen(key);
-        let listLength: number;
+        const currentTime = Math.floor(Date.now() / 1000);
+        const luaScript = `
+            local currentTime = tonumber(ARGV[1])
+            local interval = tonumber(ARGV[2])
+            local requests = tonumber(ARGV[3])
+            local shouldPush
+
+            for i, key in ipairs(KEYS) do
+                local listLength = redis.call('LLEN', key)
+
+                if listLength == 0 then
+                    redis.call('LPUSH', key, currentTime)
+                    return key
+                end
+
+                shouldPush = false
+
+                local listElements = redis.call('LRANGE', key, 0, listLength - 1)
+
+                for j, timestamp in ipairs(listElements) do
+                    if currentTime - tonumber(timestamp) > interval then
+                        redis.call('LREM', key, 1, timestamp)
+                        shouldPush = true
+                    end
+                end
+
+                listLength = redis.call('LLEN', key)
+
+                if listLength < requests or shouldPush then
+                    redis.call('LPUSH', key, currentTime)
+                    return key
+                end
+            end
+            return 'wait'
+        `;
 
         try {
-            const [listLengthArr] = await multi.exec();
-            // @ts-ignore
-            listLength = listLengthArr[1];
-            if (!listLength) {
-                await redisClient.lpush(key, currentTime.toString());
-                resolve();
+            const result = await redisClient.eval(luaScript, keys.length, ...keys, currentTime, interval, requests);
+
+            if (result !== 'wait') {
+                // @ts-ignore
+                resolve(result);
                 return;
             }
+
         } catch (e) {
-            console.error('checkRateLimit listLengthArr error ', e);
-            resolve();
-            return;
-        }
-
-        const listElements = await redisClient.lrange(key, 0, listLength - 1);
-        const timePassedResults = listElements.map((timestamp) => currentTime - parseInt(timestamp, 10));
-
-        if (timePassedResults[listLength - 1] > interval || listLength < requests) { // {requests} is num of allowed request per time
-            // If more than {interval} seconds have passed, remove all elements that meet condition
-            const multi = redisClient.multi();
-            await removeRedisElements(key, listElements, timePassedResults, multi);
-            await multi.lpush(key, currentTime.toString());
-
-            try {
-                multi.exec();
-            } catch (e) {
-                console.error('checkRateLimit error ', e);
-            }
-
-            resolve();
+            console.error('checkRateLimit error', e);
+            resolve(e);
             return;
         }
 
         setTimeout(async () => {
-            await checkRateLimit(requests, interval, redisClient);
-            resolve();
+            const waitResult = await checkRateLimit(keys, requests, interval, redisClient);
+            resolve(waitResult);
         }, 1000);
     });
+}
 
-    async function removeRedisElements(key: string, listElements: string[], timePassedResults: number[], multi) {
-        for (let i = timePassedResults.length - 1; i >= 0; i--) {
-
-            if (timePassedResults[i] < interval) {
-                return;
-            }
-
-            // if last element meet condition, empty the array
-            if (i === timePassedResults.length - 1) {
-                multi.del(key);
-                return;
-            }
-
-            multi.lrem(key, 1, listElements[i]);
-        }
+function extractHostname(url: string): string | null {
+    const hostnameRegex = /^(?:https?:\/\/)?(?:www\.)?([^:/\n?]+)/;
+    const match = url.match(hostnameRegex);
+    if (match) {
+        return match[1];
+    } else {
+        return null;
     }
-};
+}
+
+function extractAfterDx(input: string): string | null {
+    const match = input.match(/dx_(\d+)/);
+    return match ? match[1] : null;
+}

@@ -1,24 +1,15 @@
-import { Injectable } from '@nestjs/common';
-import { RateLimitMonitorService } from './services/rate-limit-monitor/rate-limit-monitor.service';
+import { Inject, Injectable } from '@nestjs/common';
+import { AxiosInstance } from 'axios';
 
 @Injectable()
 export class AppService {
 
-  constructor(private rateLimitMonitorService: RateLimitMonitorService) { }
+  constructor(@Inject('AXIOS_INSTANCE') private readonly axios: AxiosInstance) { }
 
-  async sendRequest() {
-    const startTime = new Date();
-    const axios = this.rateLimitMonitorService.setRateLimitConfig();
-
-    const hostnameTest = 'en.wikipedia.org';
-    return (await axios.request({
-      url: `https://${hostnameTest}/static/images/icons/wikipedia.png`,
+  async sendRequest(language: string) {
+    return (await this.axios.request({
+      url: `https://${language}.wikipedia.org/static/images/icons/wikipedia.png`,
       method: 'GET',
     })).data;
-
-    // const endTime = new Date();
-    // // @ts-ignore
-    // const timeDifference = endTime - startTime;
-    // return timeDifference;
   }
 }

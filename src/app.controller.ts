@@ -5,10 +5,19 @@ import { AppService } from './app.service';
 export class AppController {
   constructor(private readonly appService: AppService) { }
 
-  @Get()
+  @Get('en')
   async sendRequest() {
-    return await this.appService.sendRequest();
-    // console.log(`timeDifference ${index}, ${timeDifference}`);
-    // return { index, time: timeDifference };
+    return await this.appService.sendRequest('en');
   }
+
+  @Get('he')
+  async sendHeRequest() {
+    return await this.appService.sendRequest('he');
+  }
+
+  @Get('fr')
+  async sendFrRequest() {
+    return await this.appService.sendRequest('fr');
+  }
+
 }
