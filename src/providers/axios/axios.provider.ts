@@ -74,8 +74,13 @@ async function checkRateLimit(keys: string[], requests: number, interval: number
 
                 for j, timestamp in ipairs(listElements) do
                     if currentTime - tonumber(timestamp) > interval then
-                        redis.call('LREM', key, 1, timestamp)
+                        if j == 0 then
+                            redis.call('DEL', key)
+                            break
+                        end
+                        redis.call('LTRIM', key, j, -1)
                         shouldPush = true
+                        break
                     end
                 end
 
