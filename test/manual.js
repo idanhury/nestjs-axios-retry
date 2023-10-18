@@ -26,16 +26,20 @@ async function fetchData(index, route) {
 
 async function measureTimeForEachPromise() {
   const promises = [];
-  for (let i = 0; i < 2; i++) {
+  const startTime = performance.now();
+  for (let i = 0; i < 20; i++) {
     promises.push(fetchData(i, 'en'));
-    // promises.push(fetchData(i, 'he'));
-    // promises.push(fetchData(i, 'fr'));
+    promises.push(fetchData(i, 'he'));
+    promises.push(fetchData(i, 'fr'));
   }
 
   await Promise.all(promises);
-  console.table(arrayEn);
+  // console.table(arrayEn);
   //   console.table(arrayHe);
   //   console.table(arrayFr);
+  const endTime = performance.now();
+  const elapsedTime = +((endTime - startTime) / 1000).toFixed(2);
+  console.log('00TOTAL TIME', elapsedTime)
 }
 
 measureTimeForEachPromise();
