@@ -1,18 +1,10 @@
 import { Provider } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import Redis from 'ioredis';
-
-export interface AxiosProviderOptions {
-    [key: string]: HostOptions
-}
-interface HostOptions {
-    requests: number;
-    interval: number; // seconds
-    headers: Record<string, any>[];
-}
+import { AxiosProviderOptions, HostOptions } from '../../interfaces';
 
 export const AxiosProvider: Provider = {
-    provide: 'AXIOS_INSTANCE',
+    provide: 'RATE_LIMIT_AXIOS_INSTANCE',
     useFactory: (redisClient: Redis, options: AxiosProviderOptions): AxiosInstance => {
         const instance = axios.create();
 
@@ -48,7 +40,7 @@ export const AxiosProvider: Provider = {
 
         return instance;
     },
-    inject: ['SHARED_REDIS', 'AXIOS_OPTIONS'],
+    inject: ['RATE_LIMIT_REDIS', 'RATE_LIMIT_AXIOS_OPTIONS'],
 };
 
 async function checkRateLimit(keys: string[], requests: number, interval: number, redisClient: Redis): Promise<string> {
