@@ -4,8 +4,8 @@ import { RedisConnectionStringOptions } from '../../interfaces';
 
 export const RedisProvider: Provider = {
     provide: 'RATE_LIMIT_REDIS',
-    useFactory: ({host, port}: RedisConnectionStringOptions): Redis => {
-        return new Redis({host,port});
+    useFactory: (uri: string): Redis => {
+        return new Redis(uri);
     },
     inject: ['RATE_LIMIT_REDIS_OPTIONS']
 };

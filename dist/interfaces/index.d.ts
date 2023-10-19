@@ -1,7 +1,7 @@
 import { AxiosInstance } from "axios";
 export interface IRateLimitModule {
     rateLimitsConfig: RateLimitsConfig;
-    redisConnectionString: RedisConnectionStringOptions;
+    redisConnectionString: string;
 }
 export interface RateLimitsConfig {
     options: RateLimitsConfigOptions;
@@ -16,6 +16,6 @@ export interface HostOptions {
     headers: Record<string, any>[];
 }
 export interface RedisConnectionStringOptions {
-    host: string;
+    uri: string;
     port: number;
 }

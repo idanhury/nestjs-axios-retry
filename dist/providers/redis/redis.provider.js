@@ -4,8 +4,8 @@ exports.RedisProvider = void 0;
 const ioredis_1 = require("ioredis");
 exports.RedisProvider = {
     provide: 'RATE_LIMIT_REDIS',
-    useFactory: ({ host, port }) => {
-        return new ioredis_1.default({ host, port });
+    useFactory: (uri) => {
+        return new ioredis_1.default(uri);
     },
     inject: ['RATE_LIMIT_REDIS_OPTIONS']
 };
