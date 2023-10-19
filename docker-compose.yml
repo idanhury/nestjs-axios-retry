@@ -1,6 +1,0 @@
-version: '3'
-services:
-  cache:
-    image: redis:7.2.1-alpine
-    ports:
-      - '6379:6379'

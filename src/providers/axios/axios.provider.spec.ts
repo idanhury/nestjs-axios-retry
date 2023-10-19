@@ -65,7 +65,7 @@ describe('AxiosProvider', () => {
                 AxiosProvider
             ],
         }).compile();
-        redisClient = module.get<Redis>('SHARED_REDIS');
+        redisClient = module.get<Redis>('RATE_LIMIT_REDIS');
     });
 
     afterAll(async () => {

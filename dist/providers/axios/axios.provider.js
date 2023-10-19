@@ -1,49 +1,36 @@
-import { Provider } from '@nestjs/common';
-import axios, { AxiosInstance } from 'axios';
-import Redis from 'ioredis';
-import { AxiosProviderOptions, HostOptions } from '../../interfaces';
-
-export const AxiosProvider: Provider = {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AxiosProvider = void 0;
+const axios_1 = require("axios");
+exports.AxiosProvider = {
     provide: 'RATE_LIMIT_AXIOS_INSTANCE',
-    useFactory: (redisClient: Redis, options: AxiosProviderOptions): AxiosInstance => {
-        const instance = axios.create();
-
+    useFactory: (redisClient, options) => {
+        const instance = axios_1.default.create();
         instance.interceptors.request.use(async (config) => {
             const hostname = extractHostname(instance.getUri(config));
             const lang = hostname.match(/\b(fr|he|en)\b/);
-            const hostOptions: HostOptions = options[hostname];
-
+            const hostOptions = options[hostname];
             if (!hostOptions || hostOptions.headers.length === 0) {
                 return config;
             }
-
-            // await checkRateLimit(hostOptions.requests, hostOptions.interval, redisClient);
             const keys = hostOptions.headers.map((header, i) => `${hostname}_dx_${i}`);
             const response = await checkRateLimit(keys, hostOptions.requests, hostOptions.interval, redisClient);
             const index = extractAfterDx(response);
-
             if (hostOptions.headers[index]) {
                 Object.entries(hostOptions.headers[index]).forEach(([key, value]) => {
-
-                    // for dev. testing
-                    // @ts-ignore
                     if (!value.includes(lang[0])) {
                         debugger;
                     }
-
                     config.headers[key] = value;
                 });
             }
-
             return config;
         });
-
         return instance;
     },
     inject: ['RATE_LIMIT_REDIS', 'RATE_LIMIT_AXIOS_OPTIONS'],
 };
-
-async function checkRateLimit(keys: string[], requests: number, interval: number, redisClient: Redis): Promise<string> {
+async function checkRateLimit(keys, requests, interval, redisClient) {
     return new Promise(async (resolve, reject) => {
         const currentTime = Math.floor(Date.now() / 1000);
         const luaScript = `
@@ -85,40 +72,36 @@ async function checkRateLimit(keys: string[], requests: number, interval: number
             end
             return 'wait'
         `;
-
         try {
             const result = await redisClient.eval(luaScript, keys.length, ...keys, currentTime, interval, requests);
-
             if (result !== 'wait') {
-                // @ts-ignore
                 resolve(result);
                 return;
             }
-
-        } catch (e) {
+        }
+        catch (e) {
             console.error('checkRateLimit error', e);
             resolve(e);
             return;
         }
-
         setTimeout(async () => {
             const waitResult = await checkRateLimit(keys, requests, interval, redisClient);
             resolve(waitResult);
         }, 1000);
     });
 }
-
-function extractHostname(url: string): string | null {
+function extractHostname(url) {
     const hostnameRegex = /^(?:https?:\/\/)?(?:www\.)?([^:/\n?]+)/;
     const match = url.match(hostnameRegex);
     if (match) {
         return match[1];
-    } else {
+    }
+    else {
         return null;
     }
 }
-
-function extractAfterDx(input: string): string | null {
+function extractAfterDx(input) {
     const match = input.match(/dx_(\d+)/);
     return match ? match[1] : null;
 }
+//# sourceMappingURL=axios.provider.js.map
