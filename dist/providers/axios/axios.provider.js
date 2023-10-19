@@ -1,13 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AxiosProvider = void 0;
-const axios_1 = require("axios");
 exports.AxiosProvider = {
     provide: 'RATE_LIMIT_AXIOS_INSTANCE',
-    useFactory: (redisClient, options) => {
-        const instance = axios_1.default.create();
-        instance.interceptors.request.use(async (config) => {
-            const hostname = extractHostname(instance.getUri(config));
+    useFactory: (redisClient, { options, axiosInstance }) => {
+        axiosInstance.interceptors.request.use(async (config) => {
+            const hostname = extractHostname(axiosInstance.getUri(config));
             const lang = hostname.match(/\b(fr|he|en)\b/);
             const hostOptions = options[hostname];
             if (!hostOptions || hostOptions.headers.length === 0) {
@@ -18,15 +16,12 @@ exports.AxiosProvider = {
             const index = extractAfterDx(response);
             if (hostOptions.headers[index]) {
                 Object.entries(hostOptions.headers[index]).forEach(([key, value]) => {
-                    if (!value.includes(lang[0])) {
-                        debugger;
-                    }
                     config.headers[key] = value;
                 });
             }
             return config;
         });
-        return instance;
+        return axiosInstance;
     },
     inject: ['RATE_LIMIT_REDIS', 'RATE_LIMIT_AXIOS_OPTIONS'],
 };

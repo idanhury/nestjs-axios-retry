@@ -1,15 +1,14 @@
 import { Provider } from '@nestjs/common';
-import axios, { AxiosInstance } from 'axios';
+import { AxiosInstance } from 'axios';
 import Redis from 'ioredis';
-import { AxiosProviderOptions, HostOptions } from '../../interfaces';
+import { HostOptions, RateLimitsConfig } from '../../interfaces';
 
 export const AxiosProvider: Provider = {
     provide: 'RATE_LIMIT_AXIOS_INSTANCE',
-    useFactory: (redisClient: Redis, options: AxiosProviderOptions): AxiosInstance => {
-        const instance = axios.create();
+    useFactory: (redisClient: Redis, {options, axiosInstance}: RateLimitsConfig): AxiosInstance => {
 
-        instance.interceptors.request.use(async (config) => {
-            const hostname = extractHostname(instance.getUri(config));
+        axiosInstance.interceptors.request.use(async (config) => {
+            const hostname = extractHostname(axiosInstance.getUri(config));
             const lang = hostname.match(/\b(fr|he|en)\b/);
             const hostOptions: HostOptions = options[hostname];
 
@@ -17,20 +16,12 @@ export const AxiosProvider: Provider = {
                 return config;
             }
 
-            // await checkRateLimit(hostOptions.requests, hostOptions.interval, redisClient);
             const keys = hostOptions.headers.map((header, i) => `${hostname}_dx_${i}`);
             const response = await checkRateLimit(keys, hostOptions.requests, hostOptions.interval, redisClient);
             const index = extractAfterDx(response);
 
             if (hostOptions.headers[index]) {
                 Object.entries(hostOptions.headers[index]).forEach(([key, value]) => {
-
-                    // for dev. testing
-                    // @ts-ignore
-                    if (!value.includes(lang[0])) {
-                        debugger;
-                    }
-
                     config.headers[key] = value;
                 });
             }
@@ -38,7 +29,7 @@ export const AxiosProvider: Provider = {
             return config;
         });
 
-        return instance;
+        return axiosInstance;
     },
     inject: ['RATE_LIMIT_REDIS', 'RATE_LIMIT_AXIOS_OPTIONS'],
 };

@@ -15,18 +15,18 @@ import { RateLimitService } from './rate-limit.service';
 
 @Module({})
 export class RateLimitModule {
-    static register({axios, redis}: IRateLimitModule): DynamicModule {
+    static register({rateLimitsConfig, redisConnectionString}: IRateLimitModule): DynamicModule {
         return {
           module: RateLimitModule,
           providers: [
             {
               provide: 'RATE_LIMIT_REDIS_OPTIONS',
-              useValue: redis,
+              useValue: redisConnectionString,
             },
             RedisProvider,
             {
                 provide: 'RATE_LIMIT_AXIOS_OPTIONS',
-                useValue: axios,
+                useValue: rateLimitsConfig,
               }, 
             AxiosProvider,
             RateLimitService],

@@ -13,18 +13,18 @@ const axios_provider_1 = require("./providers/axios/axios.provider");
 const redis_provider_1 = require("./providers/redis/redis.provider");
 const rate_limit_service_1 = require("./rate-limit.service");
 let RateLimitModule = RateLimitModule_1 = class RateLimitModule {
-    static register({ axios, redis }) {
+    static register({ rateLimitsConfig, redisConnectionString }) {
         return {
             module: RateLimitModule_1,
             providers: [
                 {
                     provide: 'RATE_LIMIT_REDIS_OPTIONS',
-                    useValue: redis,
+                    useValue: redisConnectionString,
                 },
                 redis_provider_1.RedisProvider,
                 {
                     provide: 'RATE_LIMIT_AXIOS_OPTIONS',
-                    useValue: axios,
+                    useValue: rateLimitsConfig,
                 },
                 axios_provider_1.AxiosProvider,
                 rate_limit_service_1.RateLimitService
