@@ -15,7 +15,3 @@ export interface HostOptions {
     interval: number;
     headers: Record<string, any>[];
 }
-export interface RedisConnectionStringOptions {
-    uri: string;
-    port: number;
-}
