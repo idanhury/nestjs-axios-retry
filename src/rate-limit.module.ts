@@ -6,10 +6,7 @@ import { RateLimitService } from './rate-limit.service';
 
 /**
  * Instructions:
- * 1. Import RateLimitModule to your @Module and add axios and redis options.
- * 
- * 2. Import @Inject('RATE_LIMIT_AXIOS_INSTANCE') private readonly axios: AxiosInstance
- * to the service constructor
+ * Import RateLimitModule to your @Module and axios instance, redis configs and rate limit options.
  * 
 */
 
