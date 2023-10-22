@@ -24,7 +24,7 @@ export class RateLimitModule {
             {
                 provide: 'RATE_LIMIT_AXIOS_OPTIONS',
                 useValue: rateLimitsConfig,
-              }, 
+              },
             AxiosProvider,
             RateLimitService],
           exports: [RateLimitService],

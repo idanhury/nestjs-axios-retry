@@ -5,13 +5,13 @@ export interface IRateLimitModule {
 }
 export interface RateLimitsConfig {
     options: RateLimitsConfigOptions;
-    axiosInstance: AxiosInstance;
+    axiosClient: AxiosInstance;
 }
 export interface RateLimitsConfigOptions {
     [key: string]: HostOptions;
 }
 export interface HostOptions {
-    requests: number;
-    interval: number;
+    maxRequests: number;
+    minInterval: number;
     headers: Record<string, any>[];
 }

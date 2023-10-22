@@ -14,18 +14,86 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RateLimitService = void 0;
 const common_1 = require("@nestjs/common");
+const ioredis_1 = require("ioredis");
+const md5 = require("md5");
 let RateLimitService = class RateLimitService {
-    constructor(axiosInstance) {
-        this.axiosInstance = axiosInstance;
+    constructor(redis) {
+        this.redis = redis;
     }
-    get axios() {
-        return this.axiosInstance;
+    async onRequest(host, { minInterval, maxRequests, headers }) {
+        const hashedHost = md5(host);
+        const lockKey = `lock-${hashedHost}`;
+        const lockAcquired = await this.acquireLock(lockKey, minInterval);
+        if (!lockAcquired) {
+            return;
+        }
+        try {
+            return await this.retrieveHeader(`${hashedHost}`, { minInterval, maxRequests, headers });
+        }
+        catch (e) {
+            console.error('Ratelimit onRequest ', e);
+        }
+        finally {
+            await this.redis.del(`${lockKey}`);
+        }
+    }
+    async acquireLock(lockKey, lockDurationInSeconds) {
+        const lockValue = "locked";
+        const acquireLock = async () => {
+            return this.redis.set(`${lockKey}`, lockValue, 'EX', lockDurationInSeconds, 'NX');
+        };
+        const maxRetries = 10;
+        let retries = 0;
+        while (retries < maxRetries) {
+            const lockAcquired = await acquireLock();
+            if (lockAcquired === "OK") {
+                return lockAcquired;
+            }
+            retries++;
+            await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        return false;
+    }
+    async retrieveHeader(hashedHost, { minInterval, maxRequests, headers }) {
+        const keysPattern = `${hashedHost}-*`;
+        const requests = await this.redis.keys(keysPattern);
+        if (headers.length > 1) {
+            maxRequests = maxRequests * headers.length;
+        }
+        if (requests.length >= maxRequests) {
+            await this.waitForSmallestTTL(requests);
+        }
+        const timestamp = Date.now();
+        const key = `${hashedHost}-${timestamp}`;
+        await this.redis.set(key, 'key', 'EX', minInterval, 'NX');
+        const credentialsKey = `last-credential-used-${hashedHost}`;
+        const currentIndex = Number(await this.redis.get(credentialsKey));
+        const nextIndex = currentIndex + 1 < headers.length ? currentIndex + 1 : 0;
+        try {
+            await this.redis.set(credentialsKey, nextIndex);
+        }
+        catch (e) {
+            console.error('Ratelimit retrieveHeader ', e);
+        }
+        return headers[currentIndex];
+    }
+    async waitForSmallestTTL(requests) {
+        const getSmallestTTL = async () => {
+            let ttls = await Promise.all(requests.map(request => this.redis.ttl(request)));
+            ttls = ttls.filter(t => t > 0);
+            return ttls.length > 0 ? Math.min(...ttls) : 0;
+        };
+        let smallestTTLInSeconds = await getSmallestTTL();
+        while (smallestTTLInSeconds > 0) {
+            await new Promise((resolve) => setTimeout(resolve, smallestTTLInSeconds * 1000));
+            smallestTTLInSeconds = await getSmallestTTL();
+        }
     }
 };
 exports.RateLimitService = RateLimitService;
 exports.RateLimitService = RateLimitService = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, common_1.Inject)('RATE_LIMIT_AXIOS_INSTANCE')),
-    __metadata("design:paramtypes", [Function])
+    __param(0, (0, common_1.Inject)('RATE_LIMIT_REDIS')),
+    __metadata("design:paramtypes", [ioredis_1.default])
 ], RateLimitService);
 //# sourceMappingURL=rate-limit.service.js.map
