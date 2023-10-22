@@ -27,14 +27,14 @@ async function fetchData(index, route) {
 async function measureTimeForEachPromise() {
   const promises = [];
   const startTime = performance.now();
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 6; i++) {
     promises.push(fetchData(i, 'en'));
-    promises.push(fetchData(i, 'he'));
-    promises.push(fetchData(i, 'fr'));
+    // promises.push(fetchData(i, 'he'));
+    // promises.push(fetchData(i, 'fr'));
   }
 
   await Promise.all(promises);
-  // console.table(arrayEn);
+  console.table(arrayEn);
   //   console.table(arrayHe);
   //   console.table(arrayFr);
   const endTime = performance.now();
