@@ -40,7 +40,10 @@ let RateLimitService = class RateLimitService {
     async acquireLock(lockKey, lockDurationInSeconds) {
         const lockValue = "locked";
         const acquireLock = async () => {
-            return this.redis.set(`${lockKey}`, lockValue, 'EX', lockDurationInSeconds, 'NX');
+            return new Promise((resolve, reject) => {
+                const response = this.redis.set(`${lockKey}`, lockValue, 'EX', lockDurationInSeconds, 'NX');
+                resolve(response);
+            });
         };
         const maxRetries = 10;
         let retries = 0;
@@ -50,7 +53,7 @@ let RateLimitService = class RateLimitService {
                 return lockAcquired;
             }
             retries++;
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
         }
         return false;
     }
