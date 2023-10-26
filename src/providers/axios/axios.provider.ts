@@ -16,7 +16,7 @@ export const AxiosProvider: Provider = {
             }
             
             const credentials = await rateLimitService.onRequest(hostname, {
-                minInterval: hostOptions.minInterval,
+                minIntervalInSeconds: hostOptions.minIntervalInSeconds,
                 maxRequests: hostOptions.maxRequests,
                 headers: hostOptions.headers
             });

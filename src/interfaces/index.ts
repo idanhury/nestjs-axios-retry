@@ -16,6 +16,6 @@ export interface RateLimitsConfigOptions {
 
 export interface HostOptions {
     maxRequests: number;
-    minInterval: number; // seconds
+    minIntervalInSeconds: number;
     headers: Record<string, any>[];
 }
