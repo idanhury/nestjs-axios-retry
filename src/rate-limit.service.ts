@@ -50,7 +50,7 @@ export class RateLimitService {
         return lockAcquired;
       }
       retries++;
-      await new Promise((resolve) => setTimeout(resolve, 1000 * lockDurationInSeconds));
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (lockDurationInSeconds * retries * 0.1)));
     }
 
     return false;
