@@ -30,3 +30,23 @@ export const axiosClient: AxiosInstance = axios.create();
   ],
   controllers: [...],
 ```
+
+Be sure to use the same axios instance across the code.
+
+Eg;
+```
+import {axiosClient} from './app.module';
+
+@Injectable()
+export class AppService {
+
+  constructor() {}
+
+  async sendRequest(language: string) {
+    return (await axiosClient.request({
+      url: `URL/path`,
+      method: 'GET',
+    })).data;
+  }
+}
+```
