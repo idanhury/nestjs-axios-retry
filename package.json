@@ -1,5 +1,5 @@
 {
-  "name": "redis-rate-limit",
+  "name": "rate-limit-monitor-nestjs",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -14,6 +14,7 @@
   "esModuleInterop": true,
   "emitDecoratorMetadata": true,
   "scripts": {
+    "prepare": "npm run build",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest",
