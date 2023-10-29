@@ -4,12 +4,6 @@ import { RedisProvider } from './providers/redis/redis.provider';
 import { IRateLimitModule } from './interfaces';
 import { RateLimitService } from './rate-limit.service';
 
-/**
- * Instructions:
- * Import RateLimitModule to your @Module and axios instance, redis configs and rate limit options.
- * 
-*/
-
 @Module({})
 export class RateLimitModule {
     static register({rateLimitsConfig, redisConnectionString}: IRateLimitModule): DynamicModule {
