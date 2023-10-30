@@ -84,7 +84,7 @@ export class RateLimitService {
       console.error('Ratelimit retrieveHeader ', e);
     }
 
-    return headers[currentIndex];
+    return headers[ currentIndex ];
   }
 
   async waitForSmallestTTL(requests) {

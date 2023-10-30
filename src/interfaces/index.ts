@@ -1,8 +1,9 @@
 import { AxiosInstance } from "axios";
+import { Redis } from "ioredis";
 
 export interface IRateLimitModule {
     rateLimitsConfig: RateLimitsConfig;
-    redisConnectionString: string;
+    redisClient: Redis;
   }
 
 export interface RateLimitsConfig {
