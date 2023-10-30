@@ -10,6 +10,7 @@ Import RateLimitModule to your app.module
 
 ```
 export const axiosClient: AxiosInstance = axios.create();
+export const redisClient = new Redis('localhost:6379');
 
 @Module({
   imports: [RateLimitModule.register({
@@ -25,7 +26,7 @@ export const axiosClient: AxiosInstance = axios.create();
       },
       axiosClient,
     },
-    redisConnectionString: 'localhost:6379'
+    redisClient: redisClient,
   })
   ],
   controllers: [...],
