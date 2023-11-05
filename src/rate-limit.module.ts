@@ -6,7 +6,7 @@ import { RateLimitService } from './rate-limit.service';
 
 @Module({})
 export class RateLimitModule {
-    static register({rateLimitsConfig, redisConnectionString}: IRateLimitModule): DynamicModule {
+    static registerAsync({rateLimitsConfig, redisConnectionString}: IRateLimitModule): DynamicModule {
         return {
           module: RateLimitModule,
           providers: [
