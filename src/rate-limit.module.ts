@@ -12,7 +12,7 @@ export class RateLimitModule {
           providers: [
             {
               provide: 'RATE_LIMIT_REDIS_OPTIONS',
-              useValue: redisConnectionString,
+              useValue: async () => await redisConnectionString,
             },
             RedisProvider,
             {
