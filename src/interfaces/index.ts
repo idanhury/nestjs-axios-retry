@@ -2,7 +2,7 @@ import { AxiosInstance } from "axios";
 
 export interface IRateLimitModule {
     rateLimitsConfig: RateLimitsConfig;
-    redisConnectionString: string;
+    redisConnectionString: Promise<string>;
   }
 
 export interface RateLimitsConfig {
