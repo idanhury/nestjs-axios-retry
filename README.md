@@ -13,20 +13,22 @@ export const axiosClient: AxiosInstance = axios.create();
 export const redisClient = new Redis('localhost:6379');
 
 @Module({
-  imports: [RateLimitModule.register({
-    rateLimitsConfig: {
-      options: {
-        'HOSTNAME': {
-          maxRequests: 2,
-          minIntervalInSeconds: 10,
-          headers: [{
-              KEY: VALUE,
-          },
-      ]},
+  imports: [RateLimitModule.registerAsync({
+    useFactory: async () => {
+      rateLimitsConfig: {
+        options: {
+          'HOSTNAME': {
+            maxRequests: 2,
+            minIntervalInSeconds: 10,
+            headers: [{
+                KEY: VALUE,
+            },
+        ]},
+        },
+        axiosClient,
       },
-      axiosClient,
-    },
-    redisConnectionString: 'redis://localhost:6379',
+      redisConnectionString: 'redis://localhost:6379',
+    }
   })
   ],
   controllers: [...],

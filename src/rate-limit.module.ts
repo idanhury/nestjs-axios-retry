@@ -6,28 +6,28 @@ import { RateLimitService } from './rate-limit.service';
 
 @Module({})
 export class RateLimitModule {
-    static registerAsync(options: {useFactory: () => Promise<IRateLimitModule>}): DynamicModule {
-        return {
-          module: RateLimitModule,
-          providers: [
-            {
-              provide: 'RATE_LIMIT_REDIS_OPTIONS',
-              useFactory: async () => {
-                const config = await options.useFactory();
-                return config.redisConnectionString;
-              },
-            },
-            RedisProvider,
-            {
-                provide: 'RATE_LIMIT_AXIOS_OPTIONS',
-                useFactory: async () => {
-                  const config = await options.useFactory();
-                  return config.rateLimitsConfig;
-                },
-              },
-            AxiosProvider,
-            RateLimitService],
-          exports: [RateLimitService],
-        };
-    }
+  static registerAsync(options: { useFactory: () => Promise<IRateLimitModule>; }): DynamicModule {
+    return {
+      module: RateLimitModule,
+      providers: [
+        {
+          provide: 'RATE_LIMIT_REDIS_OPTIONS',
+          useFactory: async () => {
+            const config = await options.useFactory();
+            return config.redisConnectionString;
+          },
+        },
+        RedisProvider,
+        {
+          provide: 'RATE_LIMIT_AXIOS_OPTIONS',
+          useFactory: async () => {
+            const config = await options.useFactory();
+            return config.rateLimitsConfig;
+          },
+        },
+        AxiosProvider,
+        RateLimitService ],
+      exports: [ RateLimitService ],
+    };
+  }
 }
