@@ -26,7 +26,7 @@ export const redisClient = new Redis('localhost:6379');
       },
       axiosClient,
     },
-    redisClient: redisClient,
+    redisConnectionString: 'redis://localhost:6379',
   })
   ],
   controllers: [...],
