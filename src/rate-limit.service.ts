@@ -73,15 +73,20 @@ export class RateLimitService {
     const timestamp = Date.now();
     const key = `${hashedHost}-${timestamp}`;
 
-    await this.redis.set(key, 'key', 'EX', minIntervalInSeconds, 'NX');
+    await this.redis.set(key, 'key', 'EX', Math.max(minIntervalInSeconds, 1), 'NX');
 
     const credentialsKey = `last-credential-used-${hashedHost}`;
-    const currentIndex = Number(await this.redis.get(credentialsKey));
+    let currentIndex = 0;
+    try {
+      currentIndex = Number(await this.redis.get(credentialsKey));
+    } catch (e) {
+      console.error('failed get header index ', e);
+    }
     const nextIndex = currentIndex + 1 < headers.length ? currentIndex + 1 : 0;
     try {
       await this.redis.set(credentialsKey, nextIndex);
     } catch (e) {
-      console.error('Ratelimit retrieveHeader ', e);
+      console.error('failed set header index', e);
     }
 
     return headers[currentIndex];
