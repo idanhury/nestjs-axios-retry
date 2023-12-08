@@ -35,7 +35,7 @@ export class RateLimitService {
     const acquireLock = async () => {
       // https://github.com/redis/ioredis/issues/1811
       return new Promise((resolve, reject) => {
-        const response = this.redis.set(`${lockKey}`, lockValue, 'EX', lockDurationInSeconds, 'NX');
+        const response = this.redis.set(`${lockKey}`, lockValue, 'EX', Math.max(lockDurationInSeconds, 1), 'NX');
         resolve(response);
       });
 
