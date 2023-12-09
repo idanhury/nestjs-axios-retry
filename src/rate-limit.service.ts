@@ -75,7 +75,7 @@ export class RateLimitService {
 
     await this.redis.set(key, 'key', 'EX', Math.max(minIntervalInSeconds, 1), 'NX');
 
-    const credentialsKey = `last-credential-used-${hashedHost}`;
+    const credentialsKey = `last-index-credential-used-${hashedHost}`;
     let currentIndex = 0;
     try {
       currentIndex = Number(await this.redis.get(credentialsKey));
