@@ -70,9 +70,9 @@ export class RateLimitService {
       await this.waitForSmallestTTL(requests);
     }
 
+    // used in keysPattern `${hashedHost}-*` to check how many requests were made
     const timestamp = Date.now();
     const key = `${hashedHost}-${timestamp}`;
-
     await this.redis.set(key, 'key', 'EX', Math.max(minIntervalInSeconds, 1), 'NX');
 
     const credentialsKey = `last-index-credential-used-${hashedHost}`;
