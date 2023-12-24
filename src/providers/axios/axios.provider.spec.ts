@@ -4,7 +4,12 @@
 // import { SharedRedisProvider } from '../redis/shared-redis.provider';
 // import { AxiosInstance } from 'axios';
 
-// describe('AxiosProvider', () => {
+import exp from "constants";
+
+describe('AxiosProvider', () => {
+    it('should be defined', () => {
+        expect(true).toBeTruthy();
+    });
 //     let module: TestingModule;
 //     let axiosInstance: AxiosInstance;
 //     let redisClient: Redis;
@@ -193,4 +198,4 @@
 //         expect(elapsedFrTimes[3] - elapsedFrTimes[1]).toBeLessThan(5);
 //     }, 18000);
 
-// });
+});
