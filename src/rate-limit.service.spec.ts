@@ -70,28 +70,6 @@ describe('RateLimitService', () => {
         expect(lockedTime).toBeLessThan(amountOfLocks * lockDurationInSeconds + spareBufferMilliseconds);
     });
 
-    // it('acquireLock to lock - wait for first lock', async () => {
-    //     const lockDurationInSeconds = 1000;
-    //     const amountOfLocks = 2;
-    //     const mockSet = jest.spyOn(redis, 'set');
-    //     const bufferMilliseconds = 100;
-    //     mockSet
-    //     .mockImplementationOnce(() => Promise.resolve('OK')) // first lock
-    //     .mockImplementationOnce(() => Promise.resolve(null)) // second lock - failed
-    //     .mockImplementationOnce(() => Promise.resolve('OK')) // second lock - success
-    //     rateLimitService = new RateLimitService(redis);
-    //     await rateLimitService.acquireLock('test1-lock', lockDurationInSeconds);
-
-    //     await new Promise(resolve => setTimeout(() => resolve(null), bufferMilliseconds));
-
-    //     const start = performance.now();
-    //     await rateLimitService.acquireLock('test2-lock', lockDurationInSeconds);
-    //     const end = performance.now();
-    //     const lockedTime = Math.floor(end - start);
-    //     expect(lockedTime).toBeGreaterThanOrEqual(lockDurationInSeconds);
-    //     expect(lockedTime).toBeLessThan(amountOfLocks * lockDurationInSeconds + 100);
-    // });
-
     it('waitForSmallestTTL - wait for the smallest TTL - no previous requests', async () => {
         const mockTtl = jest.spyOn(redis, 'ttl');
         rateLimitService = new RateLimitService(redis);
