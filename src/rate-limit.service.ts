@@ -38,9 +38,7 @@ export class RateLimitService {
   }
 
   private async handleRateLimit(key: string, intervalInSeconds: number, maxRequests: number): Promise<number> {
-
-
-    const currentTime = Date.now();
+    let currentTime = Date.now();
     const intervalInMilliseconds = intervalInSeconds * 1000;
     const windowStart = currentTime - intervalInMilliseconds
 
@@ -56,15 +54,23 @@ export class RateLimitService {
     const currentCount = transactionResults[2][1];
 
     // @ts-ignore
-    if (currentCount >= maxRequests) {
+    if (currentCount > (maxRequests - 1)) {
       if (oldestTimestamp) {
         const oldestRequestTime = oldestTimestamp;
         const delayTime = (oldestRequestTime + intervalInMilliseconds) - currentTime;
+
+        currentTime += delayTime;
+        await this.redis.multi()
+          .zadd(key, currentTime, currentTime.toString())
+          .zremrangebyrank(key, 0, 0) // Remove the oldest entry
+          .expire(key, intervalInSeconds)
+          .exec();
+
         return delayTime;
       }
       return 0;
     } else {
-      // Add current request timestamp to Redis
+      currentTime += intervalInMilliseconds;
       await this.redis.multi().zadd(key, currentTime, currentTime.toString()).expire(key, intervalInMilliseconds).exec();
       return 0;
     }
