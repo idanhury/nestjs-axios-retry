@@ -10,6 +10,11 @@ export class RateLimitService {
   public async onRequest(host: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions) {
     const hashedHost = md5(host);
     const rateLimitKey = `rate-limit:${hashedHost}`;
+    
+    if (headers.length > 1) {
+      maxRequests = maxRequests * headers.length;
+    }
+
     const rateLimited = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
 
     if (rateLimited) {
