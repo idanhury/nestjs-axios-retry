@@ -5,106 +5,96 @@ import * as md5 from 'md5';
 
 @Injectable()
 export class RateLimitService {
-
   constructor(@Inject('RATE_LIMIT_REDIS') private redis: Redis) { }
 
-  public async onRequest(host: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions) {
+  public async onRequest(host: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions, isRetry = false) {
     const hashedHost = md5(host);
-    const lockKey = `lock-${hashedHost}`;
-    const lockAcquired = await this.acquireLock(lockKey, minIntervalInSeconds);
+    const rateLimitKey = `rate-limit:${hashedHost}`;
 
-
-    if (!lockAcquired) {
-      return;
-    }
-
-    try {
-      return await this.retrieveHeader(`${hashedHost}`, { minIntervalInSeconds, maxRequests, headers });
-    } catch (e) {
-      console.error('Ratelimit onRequest ', e);
-    } finally {
-      await this.redis.del(`${lockKey}`);
-    }
-
-
-  }
-
-  async acquireLock(lockKey: string, lockDurationInSeconds: number) {
-    const lockValue = "locked";
-
-    const acquireLock = async () => {
-      // https://github.com/redis/ioredis/issues/1811
-      return new Promise((resolve, reject) => {
-        const response = this.redis.set(`${lockKey}`, lockValue, 'EX', Math.max(lockDurationInSeconds, 1), 'NX');
-        resolve(response);
-      });
-
-    };
-
-    const maxRetries = 1000;
-    let retries = 0;
-
-    while (retries < maxRetries) {
-      const lockAcquired = await acquireLock();
-      if (lockAcquired === "OK") {
-        return lockAcquired;
-      }
-      retries++;
-      await new Promise((resolve) => setTimeout(resolve, 1000 * (lockDurationInSeconds * retries * 0.1)));
-    }
-
-    return false;
-  }
-
-  async retrieveHeader(hashedHost: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions) {
-    const keysPattern = `${hashedHost}-*`;
-    const requests = await this.redis.keys(keysPattern);
-
-
-    if (headers.length > 1) {
+    if (headers.length > 1 && !isRetry) {
       maxRequests = maxRequests * headers.length;
     }
 
-
-    if (requests.length >= maxRequests) {
-      await this.waitForSmallestTTL(requests);
-    }
-
-    // used in keysPattern `${hashedHost}-*` to check how many requests were made
-    const timestamp = Date.now();
-    const key = `${hashedHost}-${timestamp}`;
-    await this.redis.set(key, 'key', 'EX', Math.max(minIntervalInSeconds, 1), 'NX');
-
-    const credentialsKey = `last-index-credential-used-${hashedHost}`;
-    let currentIndex = 0;
+    let headerRes;
+    let delayTime = 0;
+    const lockKey = `lock:${rateLimitKey}`;
+    const lockExpireTime = 10000;
     try {
-      currentIndex = Number(await this.redis.get(credentialsKey));
-    } catch (e) {
-      console.error('failed get header index ', e);
-    }
-    const nextIndex = currentIndex + 1 < headers.length ? currentIndex + 1 : 0;
-    try {
-      await this.redis.set(credentialsKey, nextIndex);
-    } catch (e) {
-      console.error('failed set header index', e);
+      // @ts-ignore
+      const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'PX', lockExpireTime);
+      if (!lockAcquired) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers }, true);
+      }
+
+      delayTime = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
+      headerRes = await this.retrieveHeader(hashedHost, headers);
+    } finally {
+      await this.redis.del(lockKey);
     }
 
-    return headers[currentIndex];
+    await new Promise(resolve => setTimeout(resolve, delayTime));
+    return headerRes;
   }
 
-  async waitForSmallestTTL(requests) {
-    const getSmallestTTL = async () => {
-      let ttls = await Promise.all(requests.map(request => this.redis.ttl(request)));
+  private async handleRateLimit(key: string, intervalInSeconds: number, maxRequests: number): Promise<number> {
+    let currentTime = Date.now();
+    const intervalInMilliseconds = intervalInSeconds * 1000;
+    const windowStart = currentTime - intervalInMilliseconds
 
-      ttls = ttls.filter(t => t > 0);
-      return ttls.length > 0 ? Math.min(...ttls) : 0;
-    };
+    // Multi-command transaction to ensure atomicity
+    const transactionResults = await this.redis.multi()
+      .zremrangebyscore(key, 0, windowStart) // Clean out expired entries
+      .zrangebyscore(key, '-inf', '+inf', 'WITHSCORES', 'LIMIT', 0, 1) // Get the oldest entry
+      .zcard(key) // Count the number of requests in the current window
+      .exec();
 
-    let smallestTTLInSeconds = await getSmallestTTL();
-    while (smallestTTLInSeconds > 0) {
-      await new Promise((resolve) => setTimeout(resolve, smallestTTLInSeconds * 1000));
-      smallestTTLInSeconds = await getSmallestTTL();
+    // @ts-ignore
+    const oldestTimestamp = transactionResults[1][1].length > 0 ? parseInt(transactionResults[1][1][0]) : null;
+    const currentCount = transactionResults[2][1];
+
+    // @ts-ignore
+    if (currentCount > (maxRequests - 1)) {
+      if (oldestTimestamp) {
+        const oldestRequestTime = oldestTimestamp;
+        const delayTime = (oldestRequestTime + intervalInMilliseconds) - currentTime;
+
+        currentTime += delayTime;
+        await this.redis.multi()
+          .zadd(key, currentTime, currentTime.toString())
+          .zremrangebyrank(key, 0, 0) // Remove the oldest entry
+          .expire(key, intervalInSeconds)
+          .exec();
+
+        return delayTime;
+      }
+      return 0;
+    } else {
+      currentTime += intervalInMilliseconds;
+      await this.redis.multi().zadd(key, currentTime, currentTime.toString()).expire(key, intervalInMilliseconds).exec();
+      return 0;
     }
+
   }
 
+  private async retrieveHeader(hashedHost: string, headers: Record<string, any>[]): Promise<Record<string, any>> {
+    try {
+      const credentialsKey = `credentials-index:${hashedHost}`;
+      const ttlInSeconds = 3600 * 24 * 7;
+      const multi = this.redis.multi();
+      multi.get(credentialsKey);
+      multi.incr(credentialsKey);
+      multi.expire(credentialsKey, ttlInSeconds);
+
+      const [t1, [t2, currentIndex]] = await multi.exec();
+
+      // @ts-ignore
+      const nextIndex = currentIndex % headers.length;
+
+      return headers[nextIndex];
+    } catch (e) {
+      console.error(e);
+      return headers[0];
+    }
+  }
 }
