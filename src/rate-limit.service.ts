@@ -10,22 +10,36 @@ export class RateLimitService {
   public async onRequest(host: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions) {
     const hashedHost = md5(host);
     const rateLimitKey = `rate-limit:${hashedHost}`;
-    
+
     if (headers.length > 1) {
       maxRequests = maxRequests * headers.length;
     }
 
-    const rateLimited = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
+    let headerRes;
+    let delayTime = 0;
+    const lockKey = `${rateLimitKey}:lock`;
+    const lockExpireTime = 10000;
+    try {
+      // @ts-ignore
+      const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'PX', lockExpireTime);
+      if (!lockAcquired) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers });
+      }
 
-    if (rateLimited) {
-      console.debug('Rate limited exceeded');
-   }
+      delayTime = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
+      headerRes = await this.retrieveHeader(hashedHost, headers);
+    } finally {
+      await this.redis.del(lockKey);
+    }
 
-    // Retrieve and cycle headers
-    return this.retrieveHeader(hashedHost, headers);
+    await new Promise(resolve => setTimeout(resolve, delayTime));
+    return headerRes;
   }
 
-  private async handleRateLimit(key: string, intervalInSeconds: number, maxRequests: number): Promise<boolean> {
+  private async handleRateLimit(key: string, intervalInSeconds: number, maxRequests: number): Promise<number> {
+
+
     const currentTime = Date.now();
     const intervalInMilliseconds = intervalInSeconds * 1000;
     const windowStart = currentTime - intervalInMilliseconds
@@ -46,23 +60,35 @@ export class RateLimitService {
       if (oldestTimestamp) {
         const oldestRequestTime = oldestTimestamp;
         const delayTime = (oldestRequestTime + intervalInMilliseconds) - currentTime;
-        await new Promise(resolve => setTimeout(resolve, delayTime));
+        return delayTime;
       }
-      return true; // After waiting, retry
+      return 0;
     } else {
       // Add current request timestamp to Redis
       await this.redis.multi().zadd(key, currentTime, currentTime.toString()).expire(key, intervalInMilliseconds).exec();
-      return false; // No need to wait, proceed with the request
+      return 0;
     }
+
   }
 
   private async retrieveHeader(hashedHost: string, headers: Record<string, any>[]): Promise<Record<string, any>> {
-    const credentialsKey = `credentials-index:${hashedHost}`;
-    let currentIndex = Number(await this.redis.get(credentialsKey)) || 0;
-    const nextIndex = currentIndex + 1 < headers.length ? currentIndex + 1 : 0;
+    try {
+      const credentialsKey = `credentials-index:${hashedHost}`;
+      const ttlInSeconds = 3600 * 24 * 7;
+      const multi = this.redis.multi();
+      multi.get(credentialsKey);
+      multi.incr(credentialsKey);
+      multi.expire(credentialsKey, ttlInSeconds);
 
-    await this.redis.set(credentialsKey, nextIndex.toString());
+      const [t1, [t2, currentIndex]] = await multi.exec();
 
-    return headers[currentIndex];
+      // @ts-ignore
+      const nextIndex = currentIndex % headers.length;
+
+      return headers[nextIndex];
+    } catch (e) {
+      console.error(e);
+      return headers[0];
+    }
   }
 }
