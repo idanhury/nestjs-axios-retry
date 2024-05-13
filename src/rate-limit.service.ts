@@ -7,24 +7,24 @@ import * as md5 from 'md5';
 export class RateLimitService {
   constructor(@Inject('RATE_LIMIT_REDIS') private redis: Redis) { }
 
-  public async onRequest(host: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions) {
+  public async onRequest(host: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions, isRetry = false) {
     const hashedHost = md5(host);
     const rateLimitKey = `rate-limit:${hashedHost}`;
 
-    if (headers.length > 1) {
+    if (headers.length > 1 && !isRetry) {
       maxRequests = maxRequests * headers.length;
     }
 
     let headerRes;
     let delayTime = 0;
-    const lockKey = `${rateLimitKey}:lock`;
+    const lockKey = `lock:${rateLimitKey}`;
     const lockExpireTime = 10000;
     try {
       // @ts-ignore
       const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'PX', lockExpireTime);
       if (!lockAcquired) {
         await new Promise(resolve => setTimeout(resolve, 150));
-        return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers });
+        return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers }, true);
       }
 
       delayTime = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
