@@ -5,106 +5,59 @@ import * as md5 from 'md5';
 
 @Injectable()
 export class RateLimitService {
-
   constructor(@Inject('RATE_LIMIT_REDIS') private redis: Redis) { }
 
   public async onRequest(host: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions) {
     const hashedHost = md5(host);
-    const lockKey = `lock-${hashedHost}`;
-    const lockAcquired = await this.acquireLock(lockKey, minIntervalInSeconds);
+    const rateLimitKey = `rate-limit:${hashedHost}`;
+    const rateLimited = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
 
+    if (rateLimited) {
+      console.debug('Rate limited exceeded');
+   }
 
-    if (!lockAcquired) {
-      return;
-    }
-
-    try {
-      return await this.retrieveHeader(`${hashedHost}`, { minIntervalInSeconds, maxRequests, headers });
-    } catch (e) {
-      console.error('Ratelimit onRequest ', e);
-    } finally {
-      await this.redis.del(`${lockKey}`);
-    }
-
-
+    // Retrieve and cycle headers
+    return this.retrieveHeader(hashedHost, headers);
   }
 
-  async acquireLock(lockKey: string, lockDurationInSeconds: number) {
-    const lockValue = "locked";
+  private async handleRateLimit(key: string, intervalInSeconds: number, maxRequests: number): Promise<boolean> {
+    const currentTime = Date.now();
+    const intervalInMilliseconds = intervalInSeconds * 1000;
+    const windowStart = currentTime - intervalInMilliseconds
 
-    const acquireLock = async () => {
-      // https://github.com/redis/ioredis/issues/1811
-      return new Promise((resolve, reject) => {
-        const response = this.redis.set(`${lockKey}`, lockValue, 'EX', Math.max(lockDurationInSeconds, 1), 'NX');
-        resolve(response);
-      });
+    // Multi-command transaction to ensure atomicity
+    const transactionResults = await this.redis.multi()
+      .zremrangebyscore(key, 0, windowStart) // Clean out expired entries
+      .zrangebyscore(key, '-inf', '+inf', 'WITHSCORES', 'LIMIT', 0, 1) // Get the oldest entry
+      .zcard(key) // Count the number of requests in the current window
+      .exec();
 
-    };
+    // @ts-ignore
+    const oldestTimestamp = transactionResults[1][1].length > 0 ? parseInt(transactionResults[1][1][0]) : null;
+    const currentCount = transactionResults[2][1];
 
-    const maxRetries = 1000;
-    let retries = 0;
-
-    while (retries < maxRetries) {
-      const lockAcquired = await acquireLock();
-      if (lockAcquired === "OK") {
-        return lockAcquired;
+    // @ts-ignore
+    if (currentCount >= maxRequests) {
+      if (oldestTimestamp) {
+        const oldestRequestTime = oldestTimestamp;
+        const delayTime = (oldestRequestTime + intervalInMilliseconds) - currentTime;
+        await new Promise(resolve => setTimeout(resolve, delayTime));
       }
-      retries++;
-      await new Promise((resolve) => setTimeout(resolve, 1000 * (lockDurationInSeconds * retries * 0.1)));
+      return true; // After waiting, retry
+    } else {
+      // Add current request timestamp to Redis
+      await this.redis.multi().zadd(key, currentTime, currentTime.toString()).expire(key, intervalInMilliseconds).exec();
+      return false; // No need to wait, proceed with the request
     }
-
-    return false;
   }
 
-  async retrieveHeader(hashedHost: string, { minIntervalInSeconds, maxRequests, headers }: HostOptions) {
-    const keysPattern = `${hashedHost}-*`;
-    const requests = await this.redis.keys(keysPattern);
-
-
-    if (headers.length > 1) {
-      maxRequests = maxRequests * headers.length;
-    }
-
-
-    if (requests.length >= maxRequests) {
-      await this.waitForSmallestTTL(requests);
-    }
-
-    // used in keysPattern `${hashedHost}-*` to check how many requests were made
-    const timestamp = Date.now();
-    const key = `${hashedHost}-${timestamp}`;
-    await this.redis.set(key, 'key', 'EX', Math.max(minIntervalInSeconds, 1), 'NX');
-
-    const credentialsKey = `last-index-credential-used-${hashedHost}`;
-    let currentIndex = 0;
-    try {
-      currentIndex = Number(await this.redis.get(credentialsKey));
-    } catch (e) {
-      console.error('failed get header index ', e);
-    }
+  private async retrieveHeader(hashedHost: string, headers: Record<string, any>[]): Promise<Record<string, any>> {
+    const credentialsKey = `credentials-index:${hashedHost}`;
+    let currentIndex = Number(await this.redis.get(credentialsKey)) || 0;
     const nextIndex = currentIndex + 1 < headers.length ? currentIndex + 1 : 0;
-    try {
-      await this.redis.set(credentialsKey, nextIndex);
-    } catch (e) {
-      console.error('failed set header index', e);
-    }
+
+    await this.redis.set(credentialsKey, nextIndex.toString());
 
     return headers[currentIndex];
   }
-
-  async waitForSmallestTTL(requests) {
-    const getSmallestTTL = async () => {
-      let ttls = await Promise.all(requests.map(request => this.redis.ttl(request)));
-
-      ttls = ttls.filter(t => t > 0);
-      return ttls.length > 0 ? Math.min(...ttls) : 0;
-    };
-
-    let smallestTTLInSeconds = await getSmallestTTL();
-    while (smallestTTLInSeconds > 0) {
-      await new Promise((resolve) => setTimeout(resolve, smallestTTLInSeconds * 1000));
-      smallestTTLInSeconds = await getSmallestTTL();
-    }
-  }
-
 }
