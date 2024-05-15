@@ -18,15 +18,15 @@ export class RateLimitService {
     let headerRes;
     let delayTime = 0;
     const lockKey = `lock:${rateLimitKey}`;
-    const lockExpireTime = 10000;
+    const lockExpireTime = 10 * 1000;
+    
+    // @ts-ignore
+    const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'PX', lockExpireTime);
+    if (!lockAcquired) {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers }, true);
+    }
     try {
-      // @ts-ignore
-      const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'PX', lockExpireTime);
-      if (!lockAcquired) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-        return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers }, true);
-      }
-
       delayTime = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
       headerRes = await this.retrieveHeader(hashedHost, headers);
     } finally {
