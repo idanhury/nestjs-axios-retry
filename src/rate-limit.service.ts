@@ -63,7 +63,7 @@ export class RateLimitService {
         await this.redis.multi()
           .zadd(key, currentTime, currentTime.toString())
           .zremrangebyrank(key, 0, 0) // Remove the oldest entry
-          .expire(key, intervalInSeconds)
+          .expire(key, delayTime + intervalInMilliseconds)
           .exec();
 
         return delayTime;
@@ -71,7 +71,7 @@ export class RateLimitService {
       return 0;
     } else {
       currentTime += intervalInMilliseconds;
-      await this.redis.multi().zadd(key, currentTime, currentTime.toString()).expire(key, intervalInMilliseconds).exec();
+      await this.redis.multi().zadd(key, currentTime, currentTime.toString()).expire(key, intervalInMilliseconds + intervalInMilliseconds).exec();
       return 0;
     }
 
