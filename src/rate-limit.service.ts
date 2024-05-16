@@ -26,7 +26,7 @@ export class RateLimitService {
       await new Promise(resolve => setTimeout(resolve, 150));
       return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers }, true);
     }
-    const uniqueId = Math.random().toString(36).substring(7);
+    // const uniqueId = Math.random().toString(36).substring(7);
     try {
       delayTime = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
       headerRes = await this.retrieveHeader(hashedHost, headers);
