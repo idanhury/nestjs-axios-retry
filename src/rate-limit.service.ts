@@ -18,17 +18,20 @@ export class RateLimitService {
     let headerRes;
     let delayTime = 0;
     const lockKey = `lock:${rateLimitKey}`;
-    const lockExpireTime = 10000;
+    const lockExpireTime = 10 * 1000;
+    
+    // @ts-ignore
+    const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'PX', lockExpireTime);
+    if (!lockAcquired) {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers }, true);
+    }
+    // const uniqueId = Math.random().toString(36).substring(7);
     try {
-      // @ts-ignore
-      const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'PX', lockExpireTime);
-      if (!lockAcquired) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-        return await this.onRequest(host, { minIntervalInSeconds, maxRequests, headers }, true);
-      }
-
       delayTime = await this.handleRateLimit(rateLimitKey, minIntervalInSeconds, maxRequests);
       headerRes = await this.retrieveHeader(hashedHost, headers);
+      // console.log('#' + uniqueId + '#: ' + 'delayTime', delayTime);
+      // console.log('#' + uniqueId + '#: ' + 'headerRes', headerRes);
     } finally {
       await this.redis.del(lockKey);
     }
@@ -37,44 +40,22 @@ export class RateLimitService {
     return headerRes;
   }
 
-  private async handleRateLimit(key: string, intervalInSeconds: number, maxRequests: number): Promise<number> {
-    let currentTime = Date.now();
-    const intervalInMilliseconds = intervalInSeconds * 1000;
-    const windowStart = currentTime - intervalInMilliseconds
+  async handleRateLimit(key, intervalInSeconds, maxRequests) {
+    const keysPattern = `${key}-*`;
+    const requests = await this.redis.keys(keysPattern);
 
-    // Multi-command transaction to ensure atomicity
-    const transactionResults = await this.redis.multi()
-      .zremrangebyscore(key, 0, windowStart) // Clean out expired entries
-      .zrangebyscore(key, '-inf', '+inf', 'WITHSCORES', 'LIMIT', 0, 1) // Get the oldest entry
-      .zcard(key) // Count the number of requests in the current window
-      .exec();
+    const timestamp = Date.now();
+    const redisKey = `${key}-${timestamp}`;
 
-    // @ts-ignore
-    const oldestTimestamp = transactionResults[1][1].length > 0 ? parseInt(transactionResults[1][1][0]) : null;
-    const currentCount = transactionResults[2][1];
-
-    // @ts-ignore
-    if (currentCount > (maxRequests - 1)) {
-      if (oldestTimestamp) {
-        const oldestRequestTime = oldestTimestamp;
-        const delayTime = (oldestRequestTime + intervalInMilliseconds) - currentTime;
-
-        currentTime += delayTime;
-        await this.redis.multi()
-          .zadd(key, currentTime, currentTime.toString())
-          .zremrangebyrank(key, 0, 0) // Remove the oldest entry
-          .expire(key, delayTime + intervalInMilliseconds)
-          .exec();
-
-        return delayTime;
-      }
-      return 0;
-    } else {
-      currentTime += intervalInMilliseconds;
-      await this.redis.multi().zadd(key, currentTime, currentTime.toString()).expire(key, intervalInMilliseconds + intervalInMilliseconds).exec();
-      return 0;
+    if (requests.length >= maxRequests) {
+      // console.log('requests.length', requests.length, Date.now());
+      let smallestTTLInSeconds = intervalInSeconds * Math.max(Math.floor(requests.length / maxRequests), 1);
+      await this.redis.set(redisKey, 'key', 'EX', smallestTTLInSeconds, 'NX');
+      return smallestTTLInSeconds;
     }
 
+    await this.redis.set(redisKey, 'key', 'EX', Math.max(intervalInSeconds, 1), 'NX');
+    return 0;
   }
 
   private async retrieveHeader(hashedHost: string, headers: Record<string, any>[]): Promise<Record<string, any>> {
